@@ -32,17 +32,9 @@ dependencies = [
     "python-frontmatter",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "hatch",
-    "pytest",
-    "pytest-cov",
-    "nbformat",
-    "nbconvert",
-]
-
 [dependency-groups]
 dev = [
+    "hatch",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "nbformat",
@@ -66,3 +58,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "integration: Tests that make network requests to GitHub",
+]

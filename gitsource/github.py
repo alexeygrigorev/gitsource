@@ -6,13 +6,11 @@ repositories without requiring git to be installed.
 
 Features:
 - Processor registry for per-extension content transformation
-- Callback hooks for before/after file processing (e.g., caching)
 - Built-in notebook processor for .ipynb files
 """
 
 import io
 import zipfile
-import traceback
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
@@ -31,10 +29,8 @@ class RawRepositoryFile:
     content: str
 
 
-# Type aliases for clarity
+# Type alias for processor functions
 Processor = Callable[[str, str], str]  # (content, filename) -> processed_content
-BeforeProcessCallback = Callable[[str, str], bool | None]  # (filename, filepath) -> skip?
-AfterProcessCallback = Callable[[RawRepositoryFile], None]  # (file) -> None
 
 
 def notebook_processor(content: str, filename: str) -> str:
@@ -47,13 +43,12 @@ def notebook_processor(content: str, filename: str) -> str:
         filename: The notebook filename
 
     Returns:
-        Markdown representation of the notebook with code and markdown cells
+        Text representation of the notebook with code and markdown cells
     """
     try:
         from .notebook import loads_notebook, notebook_to_text
 
         nb = loads_notebook(content)
-        # Convert to plain text with markdown and code cells
         return notebook_to_text(nb, cell_type=None, separator="\n\n")
     except Exception:
         # If parsing fails, return raw content
@@ -81,29 +76,25 @@ class GithubRepositoryDataReader:
         self,
         repo_owner: str,
         repo_name: str,
+        branch: str = "main",
         allowed_extensions: Iterable[str] | None = None,
         filename_filter: Callable[[str], bool] | None = None,
-        branch: str = "main",
         processors: dict[str, Processor] | None = None,
-        before_process: BeforeProcessCallback | None = None,
-        after_process: AfterProcessCallback | None = None,
+        skip_hidden: bool = False,
     ) -> None:
         """Initialize the GitHub repository data reader.
 
         Args:
             repo_owner: The owner/organization of the GitHub repository
             repo_name: The name of the GitHub repository
+            branch: The git branch to fetch (default: "main")
             allowed_extensions: Optional set of file extensions to include
                 (e.g., {"md", "py"}). If not provided, all file types are included
             filename_filter: Optional callable to filter files by their path
-            branch: The git branch to fetch (default: "main")
             processors: Optional dict mapping file extensions to processor functions.
                 Processors take (content, filename) and return processed content.
-                Available processors: notebook_processor (for .ipynb files)
-            before_process: Optional callback called before processing each file.
-                Receives (filename, filepath). Return False to skip the file.
-            after_process: Optional callback called after processing each file.
-                Receives the RawRepositoryFile. Useful for caching, logging, etc.
+                Available: notebook_processor (for .ipynb files)
+            skip_hidden: If True, skip hidden files (starting with .). Default: False
         """
         prefix = "https://codeload.github.com"
         self.url = f"{prefix}/{repo_owner}/{repo_name}/zip/refs/heads/{branch}"
@@ -113,11 +104,17 @@ class GithubRepositoryDataReader:
         else:
             self.allowed_extensions = None
 
-        self.filename_filter = filename_filter or (lambda filepath: True)
+        if filename_filter is None:
+            self.filename_filter = lambda filepath: True
+        else:
+            self.filename_filter = filename_filter
 
-        self.processors = processors or {}
-        self.before_process = before_process
-        self.after_process = after_process
+        if processors is None:
+            self.processors = {}
+        else:
+            self.processors = processors
+
+        self.skip_hidden = skip_hidden
 
     def read(self) -> list[RawRepositoryFile]:
         """Download and extract files from the GitHub repository.
@@ -155,52 +152,28 @@ class GithubRepositoryDataReader:
             if self._should_skip_file(filepath):
                 continue
 
-            # Call before_process callback - return False to skip
-            if self.before_process:
-                try:
-                    result = self.before_process(file_info.filename, filepath)
-                    if result is False:
-                        continue
-                except Exception as e:
-                    print(f"Error in before_process for {filepath}: {e}")
-                    traceback.print_exc()
-                    continue
-
             try:
                 with zf.open(file_info) as f_in:
                     content = f_in.read().decode("utf-8", errors="ignore")
-                    content = content.strip() if content else None
+                    if content is None:
+                        continue
 
-                    if content is not None:
-                        # Apply processor if registered for this extension
-                        ext = self._get_extension(filepath)
-                        if ext in self.processors:
-                            processor = self.processors[ext]
-                            try:
-                                content = processor(content, filepath)
-                            except Exception as e:
-                                print(f"Error processing {filepath} with {processor.__name__}: {e}")
-                                traceback.print_exc()
-                                continue
+                    content = content.strip()
 
-                        file = RawRepositoryFile(
-                            filename=filepath,
-                            content=content,
-                        )
-                        data.append(file)
+                    # Apply processor if registered for this extension
+                    ext = self._get_extension(filepath)
+                    if ext in self.processors:
+                        processor = self.processors[ext]
+                        content = processor(content, filepath)
 
-                        # Call after_process callback
-                        if self.after_process:
-                            try:
-                                self.after_process(file)
-                            except Exception as e:
-                                print(f"Error in after_process for {filepath}: {e}")
-                                traceback.print_exc()
+                    file = RawRepositoryFile(
+                        filename=filepath,
+                        content=content,
+                    )
+                    data.append(file)
 
             except Exception as e:
-                print(f"Error processing {file_info.filename}: {e}")
-                traceback.print_exc()
-                continue
+                raise Exception(f"Error processing {file_info.filename}: {e}") from e
 
         return data
 
@@ -220,9 +193,10 @@ class GithubRepositoryDataReader:
             return True
 
         # Skip hidden files
-        filename = filepath.split("/")[-1]
-        if filename.startswith("."):
-            return True
+        if self.skip_hidden:
+            filename = filepath.split("/")[-1]
+            if filename.startswith("."):
+                return True
 
         # Filter by extension
         if self.allowed_extensions:

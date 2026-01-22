@@ -5,8 +5,6 @@ gitsource: GitHub repository reader with document chunking for RAG/LLM applicati
 from gitsource.__version__ import __version__
 from gitsource.chunking import chunk_documents, sliding_window
 from gitsource.github import (
-    AfterProcessCallback,
-    BeforeProcessCallback,
     GithubRepositoryDataReader,
     notebook_processor,
     Processor,
@@ -29,8 +27,6 @@ __all__ = [
     "GithubRepositoryDataReader",
     "RawRepositoryFile",
     "Processor",
-    "BeforeProcessCallback",
-    "AfterProcessCallback",
     "notebook_processor",
     # Document chunking
     "chunk_documents",

@@ -579,7 +579,7 @@ dependencies = [
     { name = "requests" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "hatch" },
     { name = "nbconvert" },
@@ -588,28 +588,15 @@ dev = [
     { name = "pytest-cov" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "nbconvert" },
-    { name = "nbformat" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-
 [package.metadata]
 requires-dist = [
-    { name = "hatch", marker = "extra == 'dev'" },
-    { name = "nbconvert", marker = "extra == 'dev'" },
-    { name = "nbformat", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "python-frontmatter" },
     { name = "requests" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "hatch" },
     { name = "nbconvert" },
     { name = "nbformat" },
     { name = "pytest", specifier = ">=8.0.0" },

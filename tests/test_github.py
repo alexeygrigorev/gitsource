@@ -2,13 +2,55 @@
 
 import json
 import pytest
+from contextlib import contextmanager
 
 from gitsource.github import (
     GithubRepositoryDataReader,
     notebook_processor,
-    Processor,
-    RawRepositoryFile,
 )
+
+
+def _create_mock_zip(files: dict[str, str]) -> bytes:
+    """Helper to create a mock zip file for testing.
+
+    Note: Adds "test-repo/" prefix to all paths to simulate GitHub's
+    codeload.zip structure which includes the repo name as top-level directory.
+    """
+    import zipfile
+    import io
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zf:
+        for path, content in files.items():
+            zf.writestr(f"test-repo/{path}", content)
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
+
+
+@contextmanager
+def _mock_github_zip(files: dict[str, str]):
+    """Context manager to mock GitHub zip download.
+
+    Usage:
+        files = {"file.txt": "content"}
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(...)
+            files = reader.read()
+    """
+    import requests
+
+    original_get = requests.get
+    zip_content = _create_mock_zip(files)
+
+    class MockResponse:
+        status_code = 200
+        content = zip_content
+
+    requests.get = lambda *args, **kwargs: MockResponse()
+    try:
+        yield
+    finally:
+        requests.get = original_get
 
 
 # Sample notebook JSON for testing
@@ -47,159 +89,116 @@ class TestNotebookProcessor:
         assert result == invalid
 
 
-class TestProcessorCallback:
-    """Tests for processor and callback functionality."""
+class TestProcessor:
+    """Tests for processor functionality."""
 
-    def test_custom_processor(self, tmp_path):
+    def test_custom_processor(self):
         """Test that custom processors are applied."""
-        # Create a mock zip file
-        import zipfile
-        import io
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zf:
-            zf.writestr("test-repo/test.txt", "hello world")
-        zip_buffer.seek(0)
-
-        reader = GithubRepositoryDataReader(
-            repo_owner="test",
-            repo_name="repo",
-            processors={
-                "txt": lambda content, filename: content.upper(),
-            },
-        )
-
-        # Manually inject our test zip
-        import requests
-        original_get = requests.get
-
-        class MockResponse:
-            status_code = 200
-            content = zip_buffer.getvalue()
-
-        requests.get = lambda *args, **kwargs: MockResponse()
-
-        try:
+        files = {"test.txt": "hello world"}
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(
+                repo_owner="test",
+                repo_name="repo",
+                processors={"txt": lambda content, filename: content.upper()},
+            )
             files = reader.read()
             assert len(files) == 1
             assert files[0].content == "HELLO WORLD"
-        finally:
-            requests.get = original_get
-
-    def test_before_process_skip(self, tmp_path):
-        """Test that before_process can skip files."""
-        import zipfile
-        import io
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zf:
-            zf.writestr("test-repo/file1.txt", "content1")
-            zf.writestr("test-repo/file2.txt", "content2")
-        zip_buffer.seek(0)
-
-        skip_files = set()
-
-        def before_process(filename, filepath):
-            if "file1" in filepath:
-                skip_files.add(filepath)
-                return False  # Skip this file
-            return None
-
-        reader = GithubRepositoryDataReader(
-            repo_owner="test",
-            repo_name="repo",
-            before_process=before_process,
-        )
-
-        import requests
-        original_get = requests.get
-
-        class MockResponse:
-            status_code = 200
-            content = zip_buffer.getvalue()
-
-        requests.get = lambda *args, **kwargs: MockResponse()
-
-        try:
-            files = reader.read()
-            assert len(files) == 1
-            assert files[0].filename == "file2.txt"
-            assert "file1.txt" in skip_files
-        finally:
-            requests.get = original_get
-
-    def test_after_process_callback(self, tmp_path):
-        """Test that after_process is called for each file."""
-        import zipfile
-        import io
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zf:
-            zf.writestr("test-repo/file1.txt", "content1")
-        zip_buffer.seek(0)
-
-        processed_files = []
-
-        def after_process(file: RawRepositoryFile):
-            processed_files.append(file.filename)
-
-        reader = GithubRepositoryDataReader(
-            repo_owner="test",
-            repo_name="repo",
-            after_process=after_process,
-        )
-
-        import requests
-        original_get = requests.get
-
-        class MockResponse:
-            status_code = 200
-            content = zip_buffer.getvalue()
-
-        requests.get = lambda *args, **kwargs: MockResponse()
-
-        try:
-            files = reader.read()
-            assert len(processed_files) == 1
-            assert "file1.txt" in processed_files[0]
-        finally:
-            requests.get = original_get
 
 
 class TestNotebookProcessorIntegration:
     """Integration tests for notebook processing with GithubRepositoryDataReader."""
 
-    def test_ipynb_files_processed_when_registered(self, tmp_path):
+    def test_ipynb_files_processed_when_registered(self):
         """Test that .ipynb files are processed when notebook_processor is registered."""
-        import zipfile
-        import io
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zf:
-            zf.writestr("test-repo/notebook.ipynb", SAMPLE_NOTEBOOK_JSON)
-        zip_buffer.seek(0)
-
-        reader = GithubRepositoryDataReader(
-            repo_owner="test",
-            repo_name="repo",
-            allowed_extensions={"ipynb"},
-            processors={"ipynb": notebook_processor},
-        )
-
-        import requests
-        original_get = requests.get
-
-        class MockResponse:
-            status_code = 200
-            content = zip_buffer.getvalue()
-
-        requests.get = lambda *args, **kwargs: MockResponse()
-
-        try:
+        files = {"notebook.ipynb": SAMPLE_NOTEBOOK_JSON}
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(
+                repo_owner="test",
+                repo_name="repo",
+                allowed_extensions={"ipynb"},
+                processors={"ipynb": notebook_processor},
+            )
             files = reader.read()
             assert len(files) == 1
             # Content should be converted from notebook JSON to text
             assert "# Test Notebook" in files[0].content
             assert "print('hello')" in files[0].content
-        finally:
-            requests.get = original_get
+
+
+class TestFileFilters:
+    """Tests for file filtering features."""
+
+    def test_skip_hidden_default_includes_hidden(self):
+        """Test that hidden files are included by default."""
+        files = {"visible.txt": "visible", ".hidden.txt": "hidden"}
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(repo_owner="test", repo_name="repo")
+            files = reader.read()
+            assert len(files) == 2
+            filenames = {f.filename for f in files}
+            assert "visible.txt" in filenames
+            assert ".hidden.txt" in filenames
+
+    def test_skip_hidden_true_excludes_hidden(self):
+        """Test that skip_hidden=True excludes hidden files."""
+        files = {"visible.txt": "visible", ".hidden.txt": "hidden"}
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(
+                repo_owner="test",
+                repo_name="repo",
+                skip_hidden=True,
+            )
+            files = reader.read()
+            assert len(files) == 1
+            assert files[0].filename == "visible.txt"
+
+    def test_allowed_extensions_filters(self):
+        """Test that allowed_extensions filters by extension."""
+        files = {
+            "file.txt": "text",
+            "file.md": "markdown",
+            "file.py": "python",
+        }
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(
+                repo_owner="test",
+                repo_name="repo",
+                allowed_extensions={"txt", "md"},
+            )
+            files = reader.read()
+            assert len(files) == 2
+            filenames = {f.filename for f in files}
+            assert "file.txt" in filenames
+            assert "file.md" in filenames
+            assert "file.py" not in filenames
+
+    def test_filename_filter(self):
+        """Test that filename_filter is applied."""
+        files = {
+            "dir1/file.txt": "file1",
+            "dir2/file.txt": "file2",
+            "dir3/file.txt": "file3",
+        }
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(
+                repo_owner="test",
+                repo_name="repo",
+                filename_filter=lambda fp: fp.startswith("dir1/") or fp.startswith("dir2/"),
+            )
+            files = reader.read()
+            assert len(files) == 2
+            filenames = {f.filename for f in files}
+            assert "dir1/file.txt" in filenames
+            assert "dir2/file.txt" in filenames
+            assert "dir3/file.txt" not in filenames
+
+    def test_path_normalization(self):
+        """Test that top-level repo directory is removed from paths."""
+        files = {"some/nested/path/file.txt": "content"}
+        with _mock_github_zip(files):
+            reader = GithubRepositoryDataReader(repo_owner="test", repo_name="repo")
+            files = reader.read()
+            assert len(files) == 1
+            # Top-level "test-repo/" should be removed, keeping the rest
+            assert files[0].filename == "some/nested/path/file.txt"
