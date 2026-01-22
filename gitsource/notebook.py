@@ -251,7 +251,7 @@ def _extract_output_text(output: dict) -> str:
         traceback = output.get("traceback", [])
         if isinstance(traceback, list):
             return "\n".join(traceback)
-        return traceback
+        return str(traceback) if traceback else ""
     
     return ""
 
