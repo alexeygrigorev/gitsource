@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gitsource"
+dynamic = ["version"]
+description = "GitHub repository reader with document chunking for RAG/LLM applications"
+readme = "README.md"
+license = {text = "WTFPL"}
+authors = [
+    {name = "Alexey Grigorev", email = "alexey@datatalks.club"},
+]
+maintainers = [
+    {name = "Alexey Grigorev", email = "alexey@datatalks.club"},
+]
+keywords = ["github", "rag", "llm", "chunking", "documents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "python-frontmatter",
+]
+
+[project.optional-dependencies]
+dev = [
+    "hatch",
+    "pytest",
+    "pytest-cov",
+    "nbformat",
+    "nbconvert",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "nbformat",
+    "nbconvert",
+]
+
+[project.urls]
+Homepage = "https://github.com/alexeygrigorev/gitsource"
+Repository = "https://github.com/alexeygrigorev/gitsource"
+Issues = "https://github.com/alexeygrigorev/gitsource/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["gitsource"]
+
+[tool.hatch.version]
+path = "gitsource/__version__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
