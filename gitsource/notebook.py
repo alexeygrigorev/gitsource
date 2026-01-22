@@ -1,8 +1,7 @@
 """
 Lightweight Jupyter notebook parser and converter.
 
-This module provides fast notebook loading using JSON directly and
-markdown conversion using nbconvert.
+This module provides fast notebook loading and markdown conversion using JSON directly.
 """
 
 import json
@@ -166,34 +165,11 @@ def notebook_to_text(
     return separator.join(cell.source for cell in cells)
 
 
-def _convert_notebook_dict(obj: Any) -> Any:
-    """Recursively convert NotebookDict to regular dict.
-
-    This is needed for nbformat.from_dict which doesn't handle dict subclasses.
-
-    Args:
-        obj: The object to convert (NotebookDict, dict, list, or other)
-
-    Returns:
-        A regular dict/list with all NotebookDict instances converted
-    """
-    if isinstance(obj, NotebookDict):
-        return {k: _convert_notebook_dict(v) for k, v in obj.items()}
-    elif isinstance(obj, dict):
-        return {k: _convert_notebook_dict(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [_convert_notebook_dict(item) for item in obj]
-    else:
-        return obj
-
-
 def notebook_to_markdown(
     notebook_path: str | Path | NotebookDict,
     clear_output: bool = True,
 ) -> str:
-    """Convert a Jupyter notebook to markdown using nbconvert.
-
-    This requires nbformat and nbconvert to be installed.
+    """Convert a Jupyter notebook to markdown using plain JSON parsing.
 
     Args:
         notebook_path: Path to the .ipynb file, or a NotebookDict
@@ -203,43 +179,81 @@ def notebook_to_markdown(
         Markdown string representation of the notebook
 
     Raises:
-        ImportError: If nbformat or nbconvert are not installed
         FileNotFoundError: If the file doesn't exist
     """
-    try:
-        import nbformat
-        from nbconvert import MarkdownExporter
-        from nbconvert.preprocessors import ClearOutputPreprocessor
-    except ImportError as e:
-        raise ImportError(
-            "nbconvert and nbformat are required for notebook_to_markdown. "
-            "Install them with: pip install nbconvert nbformat"
-        ) from e
-
     if isinstance(notebook_path, NotebookDict):
-        # Convert NotebookDict to JSON string and use nbformat.reads
-        # This ensures proper handling of source lists
-        import json
-        json_str = json.dumps(_convert_notebook_dict(notebook_path))
-        nb_node = nbformat.reads(json_str, as_version=nbformat.NO_CONVERT)
+        notebook = notebook_path
     elif isinstance(notebook_path, (str, Path)):
-        path = Path(notebook_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Notebook not found: {path}")
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-        nb_node = nbformat.reads(content, as_version=nbformat.NO_CONVERT)
+        notebook = load_notebook(notebook_path)
     else:
         raise TypeError(
             f"notebook_path must be str, Path, or NotebookDict, got {type(notebook_path)}"
         )
 
-    exporter = MarkdownExporter()
-    if clear_output:
-        exporter.register_preprocessor(ClearOutputPreprocessor(), enabled=True)
+    markdown_parts = []
+    
+    for cell in notebook.get("cells", []):
+        cell_type = cell.get("cell_type", "")
+        source_obj = cell.get("source", "")
+        
+        # Convert source to string
+        if isinstance(source_obj, str):
+            source = source_obj
+        else:
+            source = "".join(source_obj)
+        
+        if cell_type == "markdown":
+            # Add markdown cells directly
+            markdown_parts.append(source)
+        elif cell_type == "code":
+            # Wrap code cells in code blocks
+            markdown_parts.append(f"```python\n{source}\n```")
+            
+            # Add outputs if clear_output is False
+            if not clear_output:
+                outputs = cell.get("outputs", [])
+                for output in outputs:
+                    output_text = _extract_output_text(output)
+                    if output_text:
+                        markdown_parts.append(f"    {output_text}")
+    
+    return "\n\n\n".join(markdown_parts) + "\n"
 
-    md_body, _ = exporter.from_notebook_node(nb_node)
-    return md_body
+
+def _extract_output_text(output: dict) -> str:
+    """Extract text from a notebook cell output.
+    
+    Args:
+        output: The output dictionary from a notebook cell
+        
+    Returns:
+        The text content of the output, or empty string if none
+    """
+    output_type = output.get("output_type", "")
+    
+    if output_type == "stream":
+        # Stream output (stdout/stderr)
+        text = output.get("text", "")
+        if isinstance(text, list):
+            return "".join(text).rstrip("\n")
+        return text.rstrip("\n")
+    elif output_type in ("execute_result", "display_data"):
+        # Execution results or display data
+        data = output.get("data", {})
+        # Prefer text/plain representation
+        if "text/plain" in data:
+            text = data["text/plain"]
+            if isinstance(text, list):
+                return "".join(text).rstrip("\n")
+            return text.rstrip("\n")
+    elif output_type == "error":
+        # Error traceback
+        traceback = output.get("traceback", [])
+        if isinstance(traceback, list):
+            return "\n".join(traceback)
+        return traceback
+    
+    return ""
 
 
 def loads_notebook_to_markdown(content: str, clear_output: bool = True) -> str:
