@@ -1,0 +1,29 @@
+---
+title: "Sample Document"
+author: "Test Author"
+tags: ["test", "sample"]
+---
+
+# Sample Document
+
+This is a sample markdown file for testing the gitsource library.
+
+## Features
+
+- Fetch files from GitHub
+- Parse frontmatter
+- Chunk documents
+
+## Code Example
+
+```python
+from gitsource import GithubRepositoryDataReader
+
+reader = GithubRepositoryDataReader(
+    repo_owner="alexeygrigorev",
+    repo_name="gitsource",
+    allowed_extensions={"md", "ipynb"},
+)
+
+files = reader.read()
+```
