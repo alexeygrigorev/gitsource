@@ -69,15 +69,6 @@ chunks = chunk_documents(
 )
 ```
 
-### Parse Jupyter Notebooks
-
-```python
-from gitsource import load_notebook
-
-notebook = load_notebook("notebook.ipynb")
-cells = notebook.cells  # List of cell dictionaries
-```
-
 ## License
 
 WTFPL
