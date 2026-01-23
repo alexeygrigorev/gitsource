@@ -6,7 +6,7 @@ GitHub repository reader with document chunking for RAG/LLM applications.
 
 - Download repositories directly from GitHub using `codeload.github.com` (no git required)
 - Filter files by extension and path patterns
-- Parse frontmatter from markdown files
+- Parse YAML frontmatter from markdown files
 - Chunk documents using sliding windows (preserves metadata)
 - Lightweight Jupyter notebook parser
 
@@ -32,6 +32,24 @@ reader = GithubRepositoryDataReader(
 )
 
 files = reader.read()
+```
+
+### Parse Frontmatter
+
+```python
+from gitsource import GithubRepositoryDataReader
+
+reader = GithubRepositoryDataReader(
+    repo_owner="alexeygrigorev",
+    repo_name="gitsource",
+    allowed_extensions={"md"},
+)
+files = reader.read()
+
+# Parse YAML frontmatter from markdown files
+for file in files:
+    data = file.parse()
+    print(f"{data['filename']}: {data.get('title', 'No title')}")
 ```
 
 ### Process Jupyter Notebooks

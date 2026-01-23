@@ -12,8 +12,9 @@ Features:
 import io
 import zipfile
 from dataclasses import dataclass
-from typing import Callable, Iterable
+from typing import Any, Callable, Dict, Iterable
 
+import frontmatter
 import requests
 
 
@@ -27,6 +28,26 @@ class RawRepositoryFile:
     """
     filename: str
     content: str
+
+    def parse(self) -> Dict[str, Any]:
+        """Parse YAML frontmatter from the file content.
+
+        Returns:
+            Dictionary with frontmatter data plus filename and content
+
+        Example:
+            >>> file = RawRepositoryFile("doc.md", "---\\ntitle: Test\\n---\\ncontent")
+            >>> parsed = file.parse()
+            >>> parsed["title"]
+            'Test'
+            >>> parsed["filename"]
+            'doc.md'
+        """
+        import frontmatter
+        post = frontmatter.loads(self.content)
+        data = post.to_dict()
+        data["filename"] = self.filename
+        return data
 
 
 # Type alias for processor functions
