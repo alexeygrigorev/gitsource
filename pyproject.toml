@@ -37,8 +37,6 @@ dev = [
     "hatch",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
-    "nbformat",
-    "nbconvert",
 ]
 
 [project.urls]
