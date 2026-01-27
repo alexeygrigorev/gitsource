@@ -17,6 +17,8 @@ from typing import Any, Callable, Dict, Iterable
 import frontmatter
 import requests
 
+from .notebook import loads_notebook, notebook_to_text
+
 
 @dataclass
 class RawRepositoryFile:
@@ -43,7 +45,6 @@ class RawRepositoryFile:
             >>> parsed["filename"]
             'doc.md'
         """
-        import frontmatter
         post = frontmatter.loads(self.content)
         data = post.to_dict()
         data["filename"] = self.filename
@@ -67,8 +68,6 @@ def notebook_processor(content: str, filename: str) -> str:
         Text representation of the notebook with code and markdown cells
     """
     try:
-        from .notebook import loads_notebook, notebook_to_text
-
         nb = loads_notebook(content)
         return notebook_to_text(nb, cell_type=None, separator="\n\n")
     except Exception:
