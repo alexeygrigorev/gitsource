@@ -34,6 +34,25 @@ reader = GithubRepositoryDataReader(
 files = reader.read()
 ```
 
+### Pin to a Commit
+
+By default the latest commit on the branch is fetched. Pass `commit_id`
+to pin the download to an exact revision, so the data stays reproducible
+even as the repository changes:
+
+```python
+from gitsource import GithubRepositoryDataReader
+
+reader = GithubRepositoryDataReader(
+    repo_owner="DataTalksClub",
+    repo_name="llm-zoomcamp",
+    commit_id="8c1834d",  # full or short SHA; branch is ignored when set
+    allowed_extensions={"md"},
+)
+
+files = reader.read()
+```
+
 ### Parse Frontmatter
 
 ```python
