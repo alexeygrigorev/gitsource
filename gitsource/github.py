@@ -96,6 +96,7 @@ class GithubRepositoryDataReader:
         self,
         repo_owner: str,
         repo_name: str,
+        commit_id: str | None = None,
         branch: str = "main",
         allowed_extensions: Iterable[str] | None = None,
         filename_filter: Callable[[str], bool] | None = None,
@@ -107,7 +108,11 @@ class GithubRepositoryDataReader:
         Args:
             repo_owner: The owner/organization of the GitHub repository
             repo_name: The name of the GitHub repository
-            branch: The git branch to fetch (default: "main")
+            commit_id: Optional commit SHA (full or short) to fetch. When set,
+                the archive for that exact commit is downloaded and branch is
+                ignored. This pins the data to an immutable revision.
+            branch: The git branch to fetch (default: "main"). Used only when
+                commit_id is not provided.
             allowed_extensions: Optional set of file extensions to include
                 (e.g., {"md", "py"}). If not provided, all file types are included
             filename_filter: Optional callable to filter files by their path
@@ -117,7 +122,10 @@ class GithubRepositoryDataReader:
             skip_hidden: If True, skip hidden files (starting with .). Default: False
         """
         prefix = "https://codeload.github.com"
-        self.url = f"{prefix}/{repo_owner}/{repo_name}/zip/refs/heads/{branch}"
+        if commit_id is not None:
+            self.url = f"{prefix}/{repo_owner}/{repo_name}/zip/{commit_id}"
+        else:
+            self.url = f"{prefix}/{repo_owner}/{repo_name}/zip/refs/heads/{branch}"
 
         if allowed_extensions is not None:
             self.allowed_extensions = {ext.lower() for ext in allowed_extensions}

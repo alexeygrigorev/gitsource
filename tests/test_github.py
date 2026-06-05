@@ -126,6 +126,36 @@ class TestNotebookProcessorIntegration:
             assert "print('hello')" in files[0].content
 
 
+class TestUrlConstruction:
+    """Tests for how the download URL is built."""
+
+    def test_branch_default(self):
+        """Without commit_id, the URL points at the branch ref."""
+        reader = GithubRepositoryDataReader(repo_owner="test", repo_name="repo")
+        assert reader.url == (
+            "https://codeload.github.com/test/repo/zip/refs/heads/main"
+        )
+
+    def test_custom_branch(self):
+        """A custom branch is reflected in the URL."""
+        reader = GithubRepositoryDataReader(
+            repo_owner="test", repo_name="repo", branch="master"
+        )
+        assert reader.url == (
+            "https://codeload.github.com/test/repo/zip/refs/heads/master"
+        )
+
+    def test_commit_id_pins_revision(self):
+        """commit_id builds a commit archive URL and ignores branch."""
+        reader = GithubRepositoryDataReader(
+            repo_owner="test",
+            repo_name="repo",
+            commit_id="8c1834d",
+            branch="master",
+        )
+        assert reader.url == "https://codeload.github.com/test/repo/zip/8c1834d"
+
+
 class TestFileFilters:
     """Tests for file filtering features."""
 
